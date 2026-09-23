@@ -553,6 +553,12 @@ examples/minimal-rest/python
 examples/minimal-rest/javascript
 ```
 
+Research dashboard app (runs on mock data with no API key; one env var switches it to live data):
+
+```text
+apps/research-dashboard
+```
+
 Advanced JavaScript examples:
 
 ```text

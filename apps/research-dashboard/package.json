@@ -1,0 +1,16 @@
+{
+  "name": "odds-research-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sports betting research dashboard with mock data and a pluggable odds provider layer.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
