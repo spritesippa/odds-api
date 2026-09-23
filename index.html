@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0e13" />
+    <title>Odds Research Dashboard</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#view">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="icon-btn back-btn" id="back-btn" href="#/games" hidden aria-label="Back"></a>
+        <h1 id="page-title">Dashboard</h1>
+        <span class="data-pill" id="data-pill" title="All prices are invented mock data">Mock data</span>
+      </div>
+    </header>
+
+    <main id="view" tabindex="-1" aria-live="polite"></main>
+
+    <nav class="bottom-nav" aria-label="Main">
+      <a href="#/dashboard" data-nav="dashboard"><span class="nav-icon" data-icon="dashboard"></span><span>Dashboard</span></a>
+      <a href="#/games" data-nav="games"><span class="nav-icon" data-icon="games"></span><span>Games</span></a>
+      <a href="#/picks" data-nav="picks"><span class="nav-icon" data-icon="picks"></span><span>Picks</span></a>
+      <a href="#/settings" data-nav="settings"><span class="nav-icon" data-icon="settings"></span><span>Settings</span></a>
+    </nav>
+
+    <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>
