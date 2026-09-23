@@ -60,29 +60,30 @@ export function winProfit(stake, american) {
   return stake * (americanToDecimal(american) - 1);
 }
 
-export const PICK_RESULTS = ["pending", "won", "lost", "push", "void"];
+export const PICK_RESULTS = ["pending", "win", "loss", "push"];
+export const BET_TYPES = ["moneyline", "spread", "total", "prop", "parlay"];
 
-/** Profit/loss of a single pick in units. Pending, push, and void are 0. */
+/** Profit/loss of a single pick in units. Pending and push are 0. */
 export function pickProfit(pick) {
-  const stake = Number(pick.units) || 0;
-  if (pick.result === "won") return winProfit(stake, pick.price);
-  if (pick.result === "lost") return -stake;
+  const stake = Number(pick.stake) || 0;
+  if (pick.result === "win") return winProfit(stake, pick.odds);
+  if (pick.result === "loss") return -stake;
   return 0;
 }
 
 /**
  * Aggregate picks into tracker stats.
- * - Win rate counts only wins and losses (pushes/voids excluded).
- * - ROI = profit / units risked on graded picks (won, lost, push).
+ * - Win rate = wins / (wins + losses); pushes don't count either way.
+ * - Units risked = stake on settled picks (win, loss, push).
+ * - ROI = profit / units risked.
  */
 export function summarizePicks(picks) {
   const stats = {
     total: picks.length,
     pending: 0,
-    won: 0,
-    lost: 0,
+    win: 0,
+    loss: 0,
     push: 0,
-    void: 0,
     unitsRisked: 0,
     unitsPending: 0,
     profit: 0,
@@ -90,14 +91,15 @@ export function summarizePicks(picks) {
     roi: null
   };
   for (const pick of picks) {
-    const units = Number(pick.units) || 0;
-    stats[pick.result] = (stats[pick.result] || 0) + 1;
-    if (pick.result === "pending") stats.unitsPending += units;
-    else if (pick.result !== "void") stats.unitsRisked += units;
+    const stake = Number(pick.stake) || 0;
+    if (!PICK_RESULTS.includes(pick.result)) continue;
+    stats[pick.result] += 1;
+    if (pick.result === "pending") stats.unitsPending += stake;
+    else stats.unitsRisked += stake;
     stats.profit += pickProfit(pick);
   }
-  const decided = stats.won + stats.lost;
-  stats.winRate = decided > 0 ? stats.won / decided : null;
+  const decided = stats.win + stats.loss;
+  stats.winRate = decided > 0 ? stats.win / decided : null;
   stats.roi = stats.unitsRisked > 0 ? stats.profit / stats.unitsRisked : null;
   return stats;
 }
@@ -117,6 +119,11 @@ export function formatPoint(point) {
   const p = Number(point);
   if (p === 0) return "PK";
   return p > 0 ? `+${p}` : `${p}`;
+}
+
+/** Decimal odds string for display, e.g. 1.91. */
+export function formatDecimal(american) {
+  return americanToDecimal(american).toFixed(2);
 }
 
 export function formatPercent(value, digits = 1) {

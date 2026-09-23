@@ -127,9 +127,20 @@ export function buildMarketView(snapshot, market) {
     }
   });
 
+  // Best price at the consensus line from books that are up to date: what a
+  // sportsbook-style game card shows.
+  const headline = {};
+  selections.forEach((selection, i) => {
+    const top = atConsensus.reduce((a, row) =>
+      row.outcomes[i].decimal > a.outcomes[i].decimal ? row : a
+    );
+    headline[selection] = { point: top.outcomes[i].point, price: top.outcomes[i].price, book: top.bookName };
+  });
+
   return {
     market,
     selections,
+    headline,
     consensusLine,
     rows,
     consensus,
@@ -160,6 +171,7 @@ export function buildEventView(event, snapshot) {
       book: book.key,
       name: book.name,
       updatedAt: book.updatedAt,
+      stale: new Date(snapshot.asOf).getTime() - new Date(book.updatedAt).getTime() > STALE_AFTER_MS,
       holds,
       avgHold: holdValues.length ? holdValues.reduce((a, b) => a + b, 0) / holdValues.length : null,
       bestCount,
@@ -170,21 +182,41 @@ export function buildEventView(event, snapshot) {
   return { event, asOf: snapshot.asOf, markets, bookSummaries };
 }
 
-/** Compact numbers for an event list row. */
+/** Compact numbers for an event card: headline prices per market. */
 export function buildEventSummary(event, snapshot) {
   const view = buildEventView(event, snapshot);
-  const summary = { bookCount: snapshot.books.length };
-  if (view.markets.moneyline) {
-    summary.moneyline = Object.fromEntries(
-      Object.entries(view.markets.moneyline.best).map(([selection, best]) => [
-        selection,
-        { price: best.price, book: best.bookName, fair: view.markets.moneyline.consensus[selection].noVig }
-      ])
-    );
+  const markets = {};
+  for (const [key, market] of Object.entries(view.markets)) {
+    markets[key] = { line: market.consensusLine, selections: market.headline };
   }
-  if (view.markets.spread) summary.spread = view.markets.spread.consensusLine;
-  if (view.markets.total) summary.total = view.markets.total.consensusLine;
-  return summary;
+  return {
+    bookCount: snapshot.books.length,
+    staleBooks: view.bookSummaries.filter((b) => b.stale).length,
+    markets
+  };
+}
+
+/** Top price gaps (best price vs no-vig consensus) across an event's markets. */
+export function priceGaps(view) {
+  const gaps = [];
+  for (const market of Object.values(view.markets)) {
+    for (const selection of market.selections) {
+      const best = market.best[selection];
+      if (best.edgeVsConsensus === null) continue;
+      gaps.push({
+        market: market.market,
+        selection,
+        name: market.rows[0].outcomes[market.selections.indexOf(selection)].name,
+        point: best.point,
+        price: best.price,
+        book: best.bookName,
+        stale: best.stale,
+        fairPrice: market.consensus[selection].fairPrice,
+        edge: best.edgeVsConsensus
+      });
+    }
+  }
+  return gaps.sort((a, b) => b.edge - a.edge);
 }
 
 /** Opening vs current, per book, for a line-history response. */

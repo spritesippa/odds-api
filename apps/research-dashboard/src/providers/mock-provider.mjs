@@ -122,12 +122,31 @@ function priceBook(spec, book, state) {
   return markets;
 }
 
+// Typical start slots in UTC (US Eastern in September is UTC-4), so mock
+// games land at believable local times instead of "now + N hours".
+const KICKOFF_UTC = {
+  nfl: [17, 0], // 1:00 PM ET
+  nba: [23, 30], // 7:30 PM ET
+  mlb: [23, 5], // 7:05 PM ET
+  soccer: [14, 0], // 3:00 PM UK
+  ufc: [2, 0] // 10:00 PM ET main card
+};
+
+/** Start time: the sport's usual slot on the day `startsInHours` lands on. */
+function kickoffTime(spec, now) {
+  const [hour, minute] = spec.kickoffUtc || KICKOFF_UTC[spec.sport];
+  const date = new Date(now + spec.startsInHours * 3600_000);
+  date.setUTCHours(hour, minute, 0, 0);
+  if (date.getTime() < now + 2 * 3600_000) date.setUTCDate(date.getUTCDate() + 1);
+  return date.getTime();
+}
+
 function toEvent(spec, now) {
   return {
     id: spec.id,
     sport: spec.sport,
     league: spec.league,
-    startTime: new Date(now + spec.startsInHours * 3600_000).toISOString(),
+    startTime: new Date(kickoffTime(spec, now)).toISOString(),
     home: { ...spec.home },
     away: { ...spec.away },
     neutral: Boolean(spec.neutral),
@@ -176,7 +195,7 @@ export function createMockProvider(options = {}) {
       const now = nowMs();
       return MOCK_EVENTS.filter((spec) => !query.sport || spec.sport === query.sport)
         .map((spec) => toEvent(spec, now))
-        .sort((a, b) => a.startTime.localeCompare(b.startTime));
+        .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id));
     },
 
     async getEvent(eventId) {

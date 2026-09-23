@@ -55,26 +55,23 @@ test("expected value", () => {
 });
 
 test("pick profit by result", () => {
-  close(pickProfit({ units: 1, price: -110, result: "won" }), 0.909090);
-  close(pickProfit({ units: 2, price: 150, result: "won" }), 3);
-  assert.equal(pickProfit({ units: 1.5, price: -110, result: "lost" }), -1.5);
-  assert.equal(pickProfit({ units: 1, price: -110, result: "push" }), 0);
-  assert.equal(pickProfit({ units: 1, price: -110, result: "void" }), 0);
-  assert.equal(pickProfit({ units: 1, price: -110, result: "pending" }), 0);
+  close(pickProfit({ stake: 1, odds: -110, result: "win" }), 0.909090);
+  close(pickProfit({ stake: 2, odds: 150, result: "win" }), 3);
+  assert.equal(pickProfit({ stake: 1.5, odds: -110, result: "loss" }), -1.5);
+  assert.equal(pickProfit({ stake: 1, odds: -110, result: "push" }), 0);
+  assert.equal(pickProfit({ stake: 1, odds: -110, result: "pending" }), 0);
 });
 
-test("summarizePicks: win rate excludes pushes/voids, ROI uses graded units", () => {
+test("summarizePicks: win rate excludes pushes, ROI uses settled units", () => {
   const stats = summarizePicks([
-    { units: 1, price: 100, result: "won" },
-    { units: 1, price: -110, result: "lost" },
-    { units: 2, price: -110, result: "push" },
-    { units: 1, price: 200, result: "void" },
-    { units: 3, price: -110, result: "pending" }
+    { stake: 1, odds: 100, result: "win" },
+    { stake: 1, odds: -110, result: "loss" },
+    { stake: 2, odds: -110, result: "push" },
+    { stake: 3, odds: -110, result: "pending" }
   ]);
-  assert.equal(stats.won, 1);
-  assert.equal(stats.lost, 1);
+  assert.equal(stats.win, 1);
+  assert.equal(stats.loss, 1);
   assert.equal(stats.push, 1);
-  assert.equal(stats.void, 1);
   assert.equal(stats.pending, 1);
   assert.equal(stats.winRate, 0.5);
   assert.equal(stats.unitsRisked, 4);
@@ -83,9 +80,21 @@ test("summarizePicks: win rate excludes pushes/voids, ROI uses graded units", ()
   assert.equal(stats.roi, 0);
 });
 
-test("summarizePicks on an empty list", () => {
-  const stats = summarizePicks([]);
-  assert.equal(stats.winRate, null);
-  assert.equal(stats.roi, null);
-  assert.equal(stats.profit, 0);
+test("summarizePicks: parlay and prop picks count like any other pick", () => {
+  const stats = summarizePicks([
+    { stake: 0.5, odds: 596, result: "win", betType: "parlay" },
+    { stake: 1, odds: -135, result: "loss", betType: "prop" }
+  ]);
+  close(stats.profit, 0.5 * 5.96 - 1);
+  close(stats.roi, (0.5 * 5.96 - 1) / 1.5);
+  assert.equal(stats.winRate, 0.5);
+});
+
+test("summarizePicks ignores unknown results and handles an empty list", () => {
+  const empty = summarizePicks([]);
+  assert.equal(empty.winRate, null);
+  assert.equal(empty.roi, null);
+  assert.equal(empty.profit, 0);
+  const junk = summarizePicks([{ stake: 1, odds: -110, result: "won" }]);
+  assert.equal(junk.unitsRisked, 0);
 });

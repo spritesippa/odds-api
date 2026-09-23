@@ -5,10 +5,11 @@
 //   ODDS_API_KEY=... node server.mjs     # live provider (key stays server-side)
 
 import { createServer } from "node:http";
+import { readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildEventSummary, buildEventView, summarizeHistory } from "./src/analysis.mjs";
+import { buildEventSummary, buildEventView, priceGaps, summarizeHistory } from "./src/analysis.mjs";
 import { createProvider } from "./src/providers/index.mjs";
 import { MARKETS, SELECTIONS, SPORTS } from "./src/providers/provider.mjs";
 
@@ -18,17 +19,25 @@ const ROOT = fileURLToPath(new URL(".", import.meta.url));
 // Cap it so a live provider isn't hit with hundreds of requests per page load.
 const MAX_LIST_SUMMARIES = 30;
 
-// Explicit allow-list: nothing outside these files is ever served.
-const STATIC_FILES = {
-  "/": ["public/index.html", "text/html; charset=utf-8"],
-  "/index.html": ["public/index.html", "text/html; charset=utf-8"],
-  "/app.js": ["public/app.js", "text/javascript; charset=utf-8"],
-  "/chart.js": ["public/chart.js", "text/javascript; charset=utf-8"],
-  "/dom.js": ["public/dom.js", "text/javascript; charset=utf-8"],
-  "/picks.js": ["public/picks.js", "text/javascript; charset=utf-8"],
-  "/styles.css": ["public/styles.css", "text/css; charset=utf-8"],
-  "/lib/odds-math.mjs": ["src/lib/odds-math.mjs", "text/javascript; charset=utf-8"]
+// Allow-list built once at startup from the top level of public/ (no
+// subdirectories, no dotfiles) plus the shared math module. Request paths are
+// only ever looked up in this map, never joined onto the filesystem.
+const CONTENT_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml"
 };
+const STATIC_FILES = { "/lib/odds-math.mjs": ["src/lib/odds-math.mjs", CONTENT_TYPES[".mjs"]] };
+for (const name of readdirSync(join(ROOT, "public"))) {
+  const type = CONTENT_TYPES[extname(name)];
+  if (type && !name.startsWith(".")) STATIC_FILES[`/${name}`] = [`public/${name}`, type];
+}
+STATIC_FILES["/"] = STATIC_FILES["/index.html"];
+
+// Dashboard insights look at up to this many upcoming events.
+const MAX_INSIGHT_EVENTS = 20;
 
 const SECURITY_HEADERS = {
   "Content-Security-Policy":
@@ -52,6 +61,60 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+/** Open -> current for one selection, read from the sharpest available book. */
+async function referenceMove(provider, eventId, market, selection) {
+  const history = await provider.getLineHistory(eventId, { market, selection });
+  const summary = history ? summarizeHistory(history).perBook : [];
+  return summary.find((b) => b.book === "pinnacle") || summary[0] || null;
+}
+
+async function buildInsights(provider) {
+  const events = (await provider.listEvents()).slice(0, MAX_INSIGHT_EVENTS);
+  const movers = [];
+  const gaps = [];
+  const stale = [];
+
+  await Promise.all(
+    events.map(async (event) => {
+      const snapshot = await provider.getOdds(event.id);
+      if (!snapshot) return;
+      const view = buildEventView(event, snapshot);
+
+      for (const gap of priceGaps(view).slice(0, 2)) gaps.push({ eventId: event.id, sport: event.sport, ...gap });
+      for (const book of view.bookSummaries.filter((b) => b.stale)) {
+        stale.push({ eventId: event.id, sport: event.sport, book: book.name, updatedAt: book.updatedAt });
+      }
+
+      const moves = {};
+      if (view.markets.moneyline) {
+        const [away, home] = await Promise.all([
+          referenceMove(provider, event.id, "moneyline", "away"),
+          referenceMove(provider, event.id, "moneyline", "home")
+        ]);
+        const pick = [away && { side: "away", ...away }, home && { side: "home", ...home }]
+          .filter(Boolean)
+          .sort((a, b) => b.impliedMove - a.impliedMove)[0];
+        if (pick) moves.moneyline = { selection: pick.side, name: event[pick.side].name, open: pick.open.price, current: pick.current.price, impliedMove: pick.impliedMove };
+      }
+      for (const [market, selection] of [["spread", "home"], ["total", "over"]]) {
+        if (!view.markets[market]) continue;
+        const move = await referenceMove(provider, event.id, market, selection);
+        if (move && move.pointMove) moves[market] = { selection, open: move.open.point, current: move.current.point };
+      }
+      const score = Math.max(
+        Math.abs(moves.moneyline?.impliedMove || 0),
+        Math.abs((moves.spread?.current ?? 0) - (moves.spread?.open ?? 0)) * 0.03,
+        Math.abs((moves.total?.current ?? 0) - (moves.total?.open ?? 0)) * 0.015
+      );
+      if (score > 0.005) movers.push({ eventId: event.id, sport: event.sport, score, moves });
+    })
+  );
+
+  movers.sort((a, b) => b.score - a.score);
+  gaps.sort((a, b) => b.edge - a.edge);
+  return { movers: movers.slice(0, 6), gaps: gaps.slice(0, 6), stale, generatedAt: new Date().toISOString() };
+}
+
 async function handleApi(provider, url) {
   const parts = url.pathname.split("/").filter(Boolean).slice(1); // drop "api"
 
@@ -64,6 +127,8 @@ async function handleApi(provider, url) {
       generatedAt: new Date().toISOString()
     };
   }
+
+  if (parts.length === 1 && parts[0] === "insights") return buildInsights(provider);
 
   if (parts[0] !== "events") throw new HttpError(404, "Not found");
 

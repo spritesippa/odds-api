@@ -3,7 +3,8 @@
 // numbers are internally consistent: each sportsbook applies its own margin,
 // and line history walks from `open` to `current`.
 //
-// Times are relative (hours from now) so the mock slate never goes stale.
+// Times are relative (hours from now, snapped to a realistic start slot) so
+// the mock slate never goes stale.
 // Teams are real league teams for realism; matchups, prices, injuries, and
 // weather notes are invented. UFC fighters are fictional.
 
@@ -34,6 +35,7 @@ export const MOCK_EVENTS = [
     id: "nfl-kc-buf",
     sport: "nfl",
     league: "NFL",
+    kickoffUtc: [0, 20], // Sunday night, 8:20 PM ET
     startsInHours: 76,
     openedHoursAgo: 144,
     venue: "Highmark Stadium, Orchard Park NY",
@@ -82,6 +84,7 @@ export const MOCK_EVENTS = [
     id: "nba-den-lal",
     sport: "nba",
     league: "NBA",
+    kickoffUtc: [2, 30], // 10:30 PM ET, West Coast
     startsInHours: 54,
     openedHoursAgo: 48,
     venue: "Crypto.com Arena, Los Angeles CA",
@@ -97,6 +100,7 @@ export const MOCK_EVENTS = [
     id: "mlb-lad-sd",
     sport: "mlb",
     league: "MLB",
+    kickoffUtc: [1, 40], // 6:40 PM PT
     startsInHours: 8,
     openedHoursAgo: 26,
     venue: "Petco Park, San Diego CA",
@@ -145,6 +149,7 @@ export const MOCK_EVENTS = [
     id: "laliga-rma-fcb",
     sport: "soccer",
     league: "La Liga",
+    kickoffUtc: [19, 0], // 9:00 PM Madrid
     startsInHours: 98,
     openedHoursAgo: 120,
     venue: "Santiago Bernabéu, Madrid",
@@ -178,6 +183,7 @@ export const MOCK_EVENTS = [
   },
   {
     id: "ufc-reyes-bello",
+    kickoffUtc: [2, 30],
     sport: "ufc",
     league: "UFC Fight Night (mock)",
     startsInHours: 125,
@@ -190,5 +196,78 @@ export const MOCK_EVENTS = [
     total: { open: { point: 1.5, overProb: 0.58 }, current: { point: 1.5, overProb: 0.55 } },
     moves: [0.5],
     notes: ["Rounds total is over/under 1.5 rounds; fictional fighters, invented prices."]
+  },
+  {
+    id: "nfl-phi-sf",
+    sport: "nfl",
+    league: "NFL",
+    kickoffUtc: [20, 25], // 4:25 PM ET
+    startsInHours: 83,
+    openedHoursAgo: 144,
+    venue: "Levi's Stadium, Santa Clara CA",
+    away: { name: "Philadelphia Eagles", short: "PHI" },
+    home: { name: "San Francisco 49ers", short: "SF" },
+    moneyline: { open: { home: 0.53 }, current: { home: 0.52 } },
+    spread: { open: { point: -1.5 }, current: { point: -1 } },
+    total: { open: { point: 45.5 }, current: { point: 45.5 } },
+    moves: [0.5]
+  },
+  {
+    id: "nba-gsw-phx",
+    sport: "nba",
+    league: "NBA",
+    startsInHours: 56,
+    openedHoursAgo: 48,
+    venue: "Footprint Center, Phoenix AZ",
+    away: { name: "Golden State Warriors", short: "GSW" },
+    home: { name: "Phoenix Suns", short: "PHX" },
+    moneyline: { open: { home: 0.55 }, current: { home: 0.56 } },
+    spread: { open: { point: -2 }, current: { point: -2.5 } },
+    total: { open: { point: 227.5 }, current: { point: 228 } },
+    moves: [0.6]
+  },
+  {
+    id: "mlb-atl-phi",
+    sport: "mlb",
+    league: "MLB",
+    startsInHours: 12,
+    openedHoursAgo: 26,
+    venue: "Citizens Bank Park, Philadelphia PA",
+    away: { name: "Atlanta Braves", short: "ATL" },
+    home: { name: "Philadelphia Phillies", short: "PHI" },
+    moneyline: { open: { home: 0.56 }, current: { home: 0.58 } },
+    spread: { open: { point: -1.5, homeProb: 0.38 }, current: { point: -1.5, homeProb: 0.4 } },
+    total: { open: { point: 8.5, overProb: 0.5 }, current: { point: 8.5, overProb: 0.47 } },
+    moves: [0.5]
+  },
+  {
+    id: "bund-fcb-bvb",
+    sport: "soccer",
+    league: "Bundesliga",
+    startsInHours: 72,
+    openedHoursAgo: 120,
+    venue: "Allianz Arena, Munich",
+    away: { name: "Borussia Dortmund", short: "BVB" },
+    home: { name: "Bayern Munich", short: "FCB" },
+    moneyline: { open: { home: 0.62, draw: 0.2 }, current: { home: 0.64, draw: 0.19 } },
+    spread: { open: { point: -1.5, homeProb: 0.42 }, current: { point: -1.5, homeProb: 0.44 } },
+    total: { open: { point: 3.5, overProb: 0.52 }, current: { point: 3.5, overProb: 0.55 } },
+    moves: [0.5]
+  },
+  {
+    id: "ufc-costa-mbeki",
+    kickoffUtc: [1, 30],
+    sport: "ufc",
+    league: "UFC Fight Night (mock)",
+    startsInHours: 126,
+    openedHoursAgo: 240,
+    neutral: true,
+    venue: "UFC APEX, Las Vegas NV",
+    away: { name: "Leon Mbeki", short: "Mbeki" },
+    home: { name: "Andre Costa", short: "Costa" },
+    moneyline: { open: { home: 0.47 }, current: { home: 0.53 } },
+    total: { open: { point: 2.5, overProb: 0.55 }, current: { point: 2.5, overProb: 0.52 } },
+    moves: [0.4, 0.8],
+    notes: ["Near pick'em fight flipped favorites: Costa went from a slight underdog to a slight favorite. Fictional fighters, invented prices."]
   }
 ];

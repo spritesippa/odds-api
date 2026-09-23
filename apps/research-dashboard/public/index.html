@@ -2,70 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0e13" />
     <title>Odds Research Dashboard</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
     <script type="module" src="/app.js"></script>
   </head>
   <body>
+    <a class="skip-link" href="#view">Skip to content</a>
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">◧</span>
-        <div>
-          <h1>Odds Research Dashboard</h1>
-          <p class="subtle" id="provider-line">Loading data provider…</p>
-        </div>
+      <div class="topbar-inner">
+        <a class="icon-btn back-btn" id="back-btn" href="#/games" hidden aria-label="Back"></a>
+        <h1 id="page-title">Dashboard</h1>
+        <span class="data-pill" id="data-pill" title="All prices are invented mock data">Mock data</span>
       </div>
-      <nav class="tabs" aria-label="Sections">
-        <button type="button" class="tab" data-view="markets" aria-pressed="true">Markets</button>
-        <button type="button" class="tab" data-view="picks" aria-pressed="false">Picks tracker</button>
-      </nav>
-      <button type="button" class="ghost theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Theme</button>
     </header>
 
-    <div class="banner" id="data-banner" role="note"></div>
+    <main id="view" tabindex="-1" aria-live="polite"></main>
 
-    <main>
-      <section id="view-markets" class="view" aria-label="Markets">
-        <div class="filters" role="toolbar" aria-label="Sport filter" id="sport-filter"></div>
-        <div class="markets-layout">
-          <aside class="event-list" id="event-list" aria-label="Events"></aside>
-          <div class="event-detail" id="event-detail" aria-live="polite"></div>
-        </div>
-      </section>
+    <nav class="bottom-nav" aria-label="Main">
+      <a href="#/dashboard" data-nav="dashboard"><span class="nav-icon" data-icon="dashboard"></span><span>Dashboard</span></a>
+      <a href="#/games" data-nav="games"><span class="nav-icon" data-icon="games"></span><span>Games</span></a>
+      <a href="#/picks" data-nav="picks"><span class="nav-icon" data-icon="picks"></span><span>Picks</span></a>
+      <a href="#/settings" data-nav="settings"><span class="nav-icon" data-icon="settings"></span><span>Settings</span></a>
+    </nav>
 
-      <section id="view-picks" class="view" aria-label="Picks tracker" hidden>
-        <div class="picks-head">
-          <div>
-            <h2>Personal picks tracker</h2>
-            <p class="subtle">Stored only in this browser. Records research picks; it does not place bets.</p>
-          </div>
-          <div class="picks-actions">
-            <label class="inline-field">1 unit = $<input type="number" id="unit-value" min="0" step="1" inputmode="decimal" /></label>
-            <button type="button" class="ghost" id="export-picks">Export CSV</button>
-            <button type="button" class="ghost" id="reset-picks">Reset to sample picks</button>
-          </div>
-        </div>
-        <div class="kpis" id="pick-kpis"></div>
-        <div class="card">
-          <h3>Cumulative profit/loss (units)</h3>
-          <div id="pl-chart" class="chart"></div>
-        </div>
-        <div class="card">
-          <h3 id="pick-form-title">Add a pick</h3>
-          <form id="pick-form" class="pick-form" autocomplete="off"></form>
-        </div>
-        <div class="filters" role="toolbar" aria-label="Pick filter" id="pick-filter"></div>
-        <div class="card table-card">
-          <table class="picks-table" id="picks-table"></table>
-        </div>
-      </section>
-    </main>
-
-    <footer class="footer">
-      <p id="disclaimer"></p>
-    </footer>
     <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   </body>
 </html>
