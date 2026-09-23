@@ -36,7 +36,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present && node scripts/smoke_examples.mjs",
+    "test": "npm run test --workspaces --if-present && node scripts/smoke_examples.mjs && npm --prefix apps/research-dashboard test",
     "lint:openapi": "npx @redocly/cli@2.30.0 lint openapi.yaml"
   },
   "engines": {

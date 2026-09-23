@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Odds Research Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">◧</span>
+        <div>
+          <h1>Odds Research Dashboard</h1>
+          <p class="subtle" id="provider-line">Loading data provider…</p>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Sections">
+        <button type="button" class="tab" data-view="markets" aria-pressed="true">Markets</button>
+        <button type="button" class="tab" data-view="picks" aria-pressed="false">Picks tracker</button>
+      </nav>
+      <button type="button" class="ghost theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Theme</button>
+    </header>
+
+    <div class="banner" id="data-banner" role="note"></div>
+
+    <main>
+      <section id="view-markets" class="view" aria-label="Markets">
+        <div class="filters" role="toolbar" aria-label="Sport filter" id="sport-filter"></div>
+        <div class="markets-layout">
+          <aside class="event-list" id="event-list" aria-label="Events"></aside>
+          <div class="event-detail" id="event-detail" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section id="view-picks" class="view" aria-label="Picks tracker" hidden>
+        <div class="picks-head">
+          <div>
+            <h2>Personal picks tracker</h2>
+            <p class="subtle">Stored only in this browser. Records research picks; it does not place bets.</p>
+          </div>
+          <div class="picks-actions">
+            <label class="inline-field">1 unit = $<input type="number" id="unit-value" min="0" step="1" inputmode="decimal" /></label>
+            <button type="button" class="ghost" id="export-picks">Export CSV</button>
+            <button type="button" class="ghost" id="reset-picks">Reset to sample picks</button>
+          </div>
+        </div>
+        <div class="kpis" id="pick-kpis"></div>
+        <div class="card">
+          <h3>Cumulative profit/loss (units)</h3>
+          <div id="pl-chart" class="chart"></div>
+        </div>
+        <div class="card">
+          <h3 id="pick-form-title">Add a pick</h3>
+          <form id="pick-form" class="pick-form" autocomplete="off"></form>
+        </div>
+        <div class="filters" role="toolbar" aria-label="Pick filter" id="pick-filter"></div>
+        <div class="card table-card">
+          <table class="picks-table" id="picks-table"></table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p id="disclaimer"></p>
+    </footer>
+    <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+  </body>
+</html>
