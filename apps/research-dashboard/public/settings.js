@@ -1,10 +1,10 @@
 // Settings: display preferences, bankroll units, local data tools, and info.
 
-import { getMeta, isCurrent, setChrome, toast } from "/app.js";
-import { card, el, sectionHead, segmented } from "/dom.js";
-import { pickProfit } from "/lib/odds-math.mjs";
-import { BET_TYPE_LABELS, LIMITS, PICK_SPORTS, clearPicks, getPicks, getSettings, resetToSamples, sortedPicks, updateSettings } from "/store.js";
-import { formatAmerican } from "/lib/odds-math.mjs";
+import { getMeta, isCurrent, setChrome, toast } from "./app.js";
+import { card, confirmButton, el, sectionHead, segmented } from "./dom.js";
+import { pickProfit } from "./lib/odds-math.mjs";
+import { BET_TYPE_LABELS, LIMITS, PICK_SPORTS, clearPicks, getPicks, getSettings, resetToSamples, sortedPicks, updateSettings } from "./store.js";
+import { formatAmerican } from "./lib/odds-math.mjs";
 
 function csvCell(value) {
   let text = String(value ?? "");
@@ -13,20 +13,31 @@ function csvCell(value) {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function exportCsv() {
+function picksCsv() {
   const header = ["date", "sport", "matchup", "bet_type", "selection", "odds", "stake_units", "result", "profit_units", "sportsbook", "notes"];
   const rows = sortedPicks().map((p) =>
     [p.date, PICK_SPORTS[p.sport], p.matchup, BET_TYPE_LABELS[p.betType], p.selection, formatAmerican(p.odds), p.stake, p.result, pickProfit(p).toFixed(2), p.book, p.notes]
       .map(csvCell)
       .join(",")
   );
-  const blob = new Blob([[header.join(","), ...rows].join("\n")], { type: "text/csv" });
-  const link = el("a", { href: URL.createObjectURL(blob), download: "picks.csv" });
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  toast(`Exported ${rows.length} picks`);
+  return { text: [header.join(","), ...rows].join("\n"), count: rows.length };
+}
+
+/** Copy CSV to the clipboard; if that's refused, show it selected for manual copy. */
+function copyCsv(fallbackBox) {
+  const { text, count } = picksCsv();
+  const showFallback = () => {
+    fallbackBox.hidden = false;
+    fallbackBox.value = text;
+    fallbackBox.focus();
+    fallbackBox.select();
+    toast("Select all and copy the CSV below");
+  };
+  try {
+    navigator.clipboard.writeText(text).then(() => toast(`Copied ${count} picks as CSV`), showFallback);
+  } catch {
+    showFallback();
+  }
 }
 
 export async function renderSettings(view, token) {
@@ -52,6 +63,7 @@ export async function renderSettings(view, token) {
     ]);
 
   const pickCount = getPicks().length;
+  const csvBox = el("textarea", { id: "csv-output", class: "csv-box", rows: 6, readonly: true, hidden: true, "aria-label": "Picks as CSV" });
   view.replaceChildren(
     card([
       sectionHead("Display"),
@@ -85,36 +97,28 @@ export async function renderSettings(view, token) {
       sectionHead("Your data"),
       el("p", { class: "fine" }, `${pickCount} pick${pickCount === 1 ? "" : "s"} stored on this device only (browser storage). Nothing is uploaded.`),
       el("div", { class: "button-stack" }, [
-        el("button", { type: "button", class: "btn", onclick: exportCsv }, "Export picks as CSV"),
-        el(
-          "button",
-          {
-            type: "button",
-            class: "btn",
-            onclick: () => {
-              if (!confirm("Replace all picks with the sample picks?")) return;
-              resetToSamples();
-              toast("Sample picks restored");
-              rerender();
-            }
-          },
-          "Reset to sample picks"
-        ),
-        el(
-          "button",
-          {
-            type: "button",
-            class: "btn danger",
-            onclick: () => {
-              if (!confirm("Delete all picks on this device? This can't be undone.")) return;
-              clearPicks();
-              toast("All picks deleted");
-              rerender();
-            }
-          },
-          "Delete all picks"
-        )
-      ])
+        el("button", { type: "button", class: "btn", onclick: () => copyCsv(csvBox) }, "Copy picks as CSV"),
+        confirmButton({
+          content: "Reset to sample picks",
+          armedText: "Tap again to replace all picks",
+          onConfirm: () => {
+            resetToSamples();
+            toast("Sample picks restored");
+            rerender();
+          }
+        }),
+        confirmButton({
+          content: "Delete all picks",
+          armedText: "Tap again to delete every pick",
+          className: "btn danger",
+          onConfirm: () => {
+            clearPicks();
+            toast("All picks deleted");
+            rerender();
+          }
+        })
+      ]),
+      csvBox
     ]),
     card([sectionHead("Data source"), el("p", { class: "muted", id: "source-text" }, "Loading…")]),
     card([

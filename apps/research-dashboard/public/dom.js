@@ -89,3 +89,32 @@ export function card(children, className = "") {
 export function sectionHead(title, aside) {
   return el("div", { class: "section-head" }, [el("h2", {}, title), aside || null]);
 }
+
+/**
+ * A button that asks for a second tap instead of a confirm() dialog (which
+ * embedded viewers block). First tap arms it for 4 seconds; the second runs
+ * `onConfirm`. `content` is what it shows at rest (text or an icon).
+ */
+export function confirmButton({ content, armedText, label, className = "btn", onConfirm }) {
+  let timer = null;
+  const button = el("button", { type: "button", class: className, "aria-label": label }, content);
+  const disarm = () => {
+    clearTimeout(timer);
+    button.classList.remove("armed");
+    button.replaceChildren(...[].concat(content).map((c) => (c instanceof Node ? c : document.createTextNode(String(c)))));
+    if (label) button.setAttribute("aria-label", label);
+  };
+  button.addEventListener("click", () => {
+    if (button.classList.contains("armed")) {
+      disarm();
+      onConfirm();
+      return;
+    }
+    button.classList.add("armed");
+    button.replaceChildren(document.createTextNode(armedText));
+    button.setAttribute("aria-label", armedText);
+    timer = setTimeout(disarm, 4000);
+  });
+  button.addEventListener("blur", () => setTimeout(disarm, 150));
+  return button;
+}

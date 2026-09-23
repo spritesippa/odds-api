@@ -34,6 +34,8 @@
   --rail-w: 92px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Clear the phone's status bar; the bottom nav pads itself. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 * {
@@ -108,13 +110,12 @@ button {
 
 .topbar {
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top, 0px);
   z-index: 20;
   background: rgba(10, 14, 19, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
-  padding-top: env(safe-area-inset-top, 0px);
 }
 .topbar-inner {
   display: flex;
@@ -447,7 +448,7 @@ main:focus {
 }
 .market-tabs {
   position: sticky;
-  top: calc(56px + env(safe-area-inset-top, 0px) + 6px);
+  top: calc(56px + env(safe-area-inset-top, 0px) + 6px); /* below the sticky top bar */
   z-index: 10;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
@@ -1384,4 +1385,27 @@ thead th.num {
   .segmented button[aria-pressed="true"] {
     outline: 2px solid CanvasText;
   }
+}
+
+/* Two-tap confirm buttons */
+.btn.armed,
+.icon-btn.armed {
+  color: var(--neg);
+  border-color: rgba(248, 113, 113, 0.55);
+  background: var(--neg-wash);
+  font-weight: 700;
+}
+.icon-btn.armed {
+  padding: 0 10px;
+  font-size: 13px;
+}
+.csv-box {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
 }

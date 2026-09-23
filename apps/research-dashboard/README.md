@@ -23,11 +23,21 @@ npm test           # node:test suite (math, providers, API)
 
 `PORT` and `HOST` override the listen address.
 
+### Static build (no server)
+
+```bash
+npm run build:static   # writes build/static/
+```
+
+This produces a self-contained copy that runs the same API code (`src/api.mjs`) in the browser against the mock provider, so it can be hosted as plain files. It contains mock data only: the live provider and anything to do with an API key are left out, and a test enforces that. `index.html` in the build holds page content only (title, links, markup) for hosts that supply their own HTML skeleton.
+
+The app uses tap-twice buttons instead of `confirm()` dialogs, and copies CSV to the clipboard instead of downloading a file, because embedded and sandboxed viewers often block both.
+
 ## Architecture
 
 ```text
 browser (public/*)  ──fetch──▶  server.mjs  /api/*  ──▶  analysis.mjs  ──▶  OddsProvider
-   app.js       router, top bar, bottom nav              (implied, no-vig,     ├─ mock-provider.mjs     (default)
+   app.js       router, top bar, bottom nav; transport.js = HTTP (or in-browser in the static build)              (implied, no-vig,     ├─ mock-provider.mjs     (default)
    dashboard.js / games.js / picks.js / settings.js       hold, best, consensus) └─ odds-api-provider.mjs (ODDS_API_KEY)
    store.js     picks + settings in localStorage (validated, migrated)
    chart.js     SVG charts          format.js / dom.js  helpers

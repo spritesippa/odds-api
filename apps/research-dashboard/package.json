@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node server.mjs",
     "dev": "node --watch server.mjs",
+    "build:static": "node scripts/build-static.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {

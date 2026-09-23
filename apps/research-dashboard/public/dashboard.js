@@ -1,12 +1,12 @@
 // Dashboard: your record at a glance, biggest line moves, best prices vs the
 // market, stale-price alerts, and the next games up.
 
-import { api, isCurrent, setChrome } from "/app.js";
-import { card, el, icon, sectionHead, SPORT_LABELS } from "/dom.js";
-import { formatPoint, kickoff, lineText, marketLabel, odds, signedPct, tone } from "/format.js";
-import { summarizePicks } from "/lib/odds-math.mjs";
-import { getPicks } from "/store.js";
-import { statTiles } from "/picks.js";
+import { api, isCurrent, setChrome } from "./app.js";
+import { card, el, icon, sectionHead, SPORT_LABELS } from "./dom.js";
+import { formatPoint, kickoff, lineText, marketLabel, odds, signedPct, tone } from "./format.js";
+import { summarizePicks } from "./lib/odds-math.mjs";
+import { getPicks } from "./store.js";
+import { statTiles } from "./picks.js";
 
 function shortMatchup(event) {
   return event.neutral ? `${event.home.short} vs ${event.away.short}` : `${event.away.short} @ ${event.home.short}`;

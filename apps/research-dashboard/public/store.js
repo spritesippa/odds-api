@@ -2,8 +2,8 @@
 // is sent to the server or any third party. Every read is validated because
 // storage can be edited by hand, cleared, or unavailable (private mode).
 
-import { BET_TYPES, PICK_RESULTS } from "/lib/odds-math.mjs";
-import { SPORT_LABELS } from "/dom.js";
+import { BET_TYPES, PICK_RESULTS } from "./lib/odds-math.mjs";
+import { SPORT_LABELS } from "./dom.js";
 
 const PICKS_KEY = "odds-research-dashboard:picks:v2";
 const LEGACY_PICKS_KEY = "odds-research-dashboard:picks:v1";

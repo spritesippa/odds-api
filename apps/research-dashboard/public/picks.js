@@ -1,11 +1,11 @@
 // Personal picks tracker. Picks are mock/research entries stored only in this
 // browser. Nothing here places, sends, or syncs a bet anywhere.
 
-import { isCurrent, navigate, setChrome, toast } from "/app.js";
-import { lineChart } from "/chart.js";
-import { card, el, icon, sectionHead, segmented } from "/dom.js";
-import { formatPercent, money, odds, pickDate, signedPct, tone, units } from "/format.js";
-import { BET_TYPES, PICK_RESULTS, breakEvenRate, pickProfit, summarizePicks, winProfit } from "/lib/odds-math.mjs";
+import { isCurrent, navigate, setChrome, toast } from "./app.js";
+import { lineChart } from "./chart.js";
+import { card, confirmButton, el, icon, sectionHead, segmented } from "./dom.js";
+import { formatPercent, money, odds, pickDate, signedPct, tone, units } from "./format.js";
+import { BET_TYPES, PICK_RESULTS, breakEvenRate, pickProfit, summarizePicks, winProfit } from "./lib/odds-math.mjs";
 import {
   BET_TYPE_LABELS,
   LIMITS,
@@ -20,7 +20,7 @@ import {
   savePick,
   setResult,
   sortedPicks
-} from "/store.js";
+} from "./store.js";
 
 const filters = { result: "all", sport: "all" };
 let prefill = null;
@@ -114,21 +114,17 @@ function pickCard(pick, rerender) {
         { label: `Result for ${pick.selection}`, className: "result-seg" }
       ),
       el("a", { class: "icon-btn", href: `#/picks/edit/${pick.id}`, "aria-label": `Edit ${pick.selection}` }, icon("edit")),
-      el(
-        "button",
-        {
-          type: "button",
-          class: "icon-btn",
-          "aria-label": `Delete ${pick.selection}`,
-          onclick: () => {
-            if (!confirm(`Delete "${pick.selection}"?`)) return;
-            deletePick(pick.id);
-            toast("Pick deleted");
-            rerender();
-          }
-        },
-        icon("trash")
-      )
+      confirmButton({
+        content: icon("trash"),
+        armedText: "Delete?",
+        label: `Delete ${pick.selection}`,
+        className: "icon-btn delete-btn",
+        onConfirm: () => {
+          deletePick(pick.id);
+          toast("Pick deleted");
+          rerender();
+        }
+      })
     ])
   ]);
 }

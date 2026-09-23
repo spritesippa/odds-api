@@ -2,9 +2,9 @@
 // (fair value, book comparison, line movement, sportsbook cards).
 // Tapping any price opens the pick form prefilled; nothing is ever wagered.
 
-import { api, isCurrent, navigate, setChrome } from "/app.js";
-import { hideTooltip, lineChart } from "/chart.js";
-import { card, el, icon, sectionHead, segmented, SPORT_LABELS } from "/dom.js";
+import { api, isCurrent, navigate, setChrome } from "./app.js";
+import { hideTooltip, lineChart } from "./chart.js";
+import { card, el, icon, sectionHead, segmented, SPORT_LABELS } from "./dom.js";
 import {
   ago,
   dateTime,
@@ -18,8 +18,8 @@ import {
   shortMarketLabel,
   signedPct,
   tone
-} from "/format.js";
-import { setPickPrefill } from "/picks.js";
+} from "./format.js";
+import { setPickPrefill } from "./picks.js";
 
 const MARKETS = ["spread", "total", "moneyline"];
 const DESKTOP = "(min-width: 960px)";

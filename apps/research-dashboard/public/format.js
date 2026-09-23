@@ -1,7 +1,7 @@
 // Display formatting that depends on user settings (odds format, unit value).
 
-import { formatAmerican, formatDecimal, formatPercent, formatPoint } from "/lib/odds-math.mjs";
-import { getSettings } from "/store.js";
+import { formatAmerican, formatDecimal, formatPercent, formatPoint } from "./lib/odds-math.mjs";
+import { getSettings } from "./store.js";
 
 export { formatPercent, formatPoint };
 

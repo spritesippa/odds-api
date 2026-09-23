@@ -1,22 +1,20 @@
 // App shell: hash router, top bar, bottom navigation, and a tiny API client.
 // Views only call this app's own /api routes; all pick data stays in the browser.
 
-import { hideTooltip } from "/chart.js";
-import { el, icon } from "/dom.js";
-import { renderDashboard } from "/dashboard.js";
-import { renderGames } from "/games.js";
-import { renderPicks, renderPickForm } from "/picks.js";
-import { renderSettings } from "/settings.js";
-import { onExternalChange } from "/store.js";
+import { hideTooltip } from "./chart.js";
+import { el, icon } from "./dom.js";
+import { renderDashboard } from "./dashboard.js";
+import { renderGames } from "./games.js";
+import { renderPicks, renderPickForm } from "./picks.js";
+import { renderSettings } from "./settings.js";
+import { onExternalChange } from "./store.js";
+import { request } from "./transport.js";
 
 let meta = null;
 let renderToken = 0;
 
-export async function api(path) {
-  const response = await fetch(path, { headers: { Accept: "application/json" } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
-  return body;
+export function api(path) {
+  return request(path);
 }
 
 export async function getMeta() {
