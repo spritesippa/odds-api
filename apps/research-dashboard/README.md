@@ -31,6 +31,8 @@ npm run build:static   # writes build/static/
 
 This produces a self-contained copy that runs the same API code (`src/api.mjs`) in the browser against the mock provider, so it can be hosted as plain files. It contains mock data only: the live provider and anything to do with an API key are left out, and a test enforces that. `index.html` in the build holds page content only (title, links, markup) for hosts that supply their own HTML skeleton.
 
+`npm run build:site` writes the same thing as a full HTML page to `build/site/` for a plain static host such as GitHub Pages. All paths are relative, so it also works under a `/repo-name/` subpath.
+
 The app uses tap-twice buttons instead of `confirm()` dialogs, and copies CSV to the clipboard instead of downloading a file, because embedded and sandboxed viewers often block both.
 
 ## Architecture

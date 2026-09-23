@@ -47,3 +47,13 @@ test("static transport answers API calls in the browser-style runtime", async ()
   assert.ok(insights.movers.length > 0);
   await assert.rejects(request("/api/events/nope"), /Event not found/);
 });
+
+test("standalone build is a full HTML page for plain static hosts", () => {
+  execFileSync(process.execPath, [join(ROOT, "scripts/build-static.mjs"), "--standalone"], { stdio: "pipe" });
+  const site = join(ROOT, "build", "site");
+  const html = readFileSync(join(site, "index.html"), "utf8");
+  assert.match(html, /^<!doctype html>/i);
+  assert.ok(existsSync(join(site, ".nojekyll")));
+  assert.ok(!files(site).some((f) => f.includes("odds-api-provider")));
+  assert.ok(!/(href|src)="\//.test(html), "asset paths must be relative for a /repo/ subpath");
+});

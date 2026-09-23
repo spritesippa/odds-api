@@ -3,14 +3,16 @@
 // provider, so it can be hosted anywhere without server.mjs. Mock data only:
 // the live provider and any API key are never included.
 //
-//   node scripts/build-static.mjs
+//   node scripts/build-static.mjs               # page content only (hosts that add their own skeleton)
+//   node scripts/build-static.mjs --standalone  # full HTML page, e.g. for GitHub Pages
 
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = join(ROOT, "build", "static");
+const STANDALONE = process.argv.includes("--standalone");
+const OUT = join(ROOT, "build", STANDALONE ? "site" : "static");
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
@@ -45,9 +47,18 @@ export async function request(path) {
 `
 );
 
+const html = readFileSync(join(ROOT, "public/index.html"), "utf8");
+if (STANDALONE) {
+  // A plain static host (GitHub Pages) serves the full document as-is.
+  // .nojekyll stops Pages from running Jekyll over the files.
+  writeFileSync(join(OUT, "index.html"), html);
+  writeFileSync(join(OUT, ".nojekyll"), "");
+  console.log(`Standalone site written to ${OUT}`);
+  process.exit(0);
+}
+
 // Hosts that supply their own <html>/<head>/<body> skeleton get the page
 // content only: the head's title/links/script plus the body's markup.
-const html = readFileSync(join(ROOT, "public/index.html"), "utf8");
 const head = html.match(/<head>([\s\S]*?)<\/head>/)[1].replace(/\s*<meta (charset|name="viewport")[^>]*>/g, "");
 const body = html.match(/<body>([\s\S]*?)<\/body>/)[1];
 writeFileSync(join(OUT, "index.html"), `${head.trim()}\n${body.trim()}\n`);
