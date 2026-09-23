@@ -1,0 +1,29 @@
+# Render Blueprint for the odds research dashboard (apps/research-dashboard).
+# In Render: New > Blueprint, pick this repo and branch. Render will ask for
+# the two secret values below; they're stored in Render, never in this repo.
+services:
+  - type: web
+    name: odds-research-dashboard
+    runtime: node
+    plan: free
+    rootDir: apps/research-dashboard
+    buildCommand: node --version # no dependencies to install
+    startCommand: node server.mjs
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Listen on all interfaces so Render can route traffic in.
+      - key: HOST
+        value: 0.0.0.0
+      # Trust Render's proxy for the client IP used by the rate limiter.
+      - key: TRUST_PROXY
+        value: "1"
+      # Your odds-api.net key. Setting it switches the dashboard to live data.
+      - key: ODDS_API_KEY
+        sync: false
+      # Password for the site (any username). Strongly recommended, since the
+      # page spends your API quota for anyone who can open it.
+      - key: DASHBOARD_PASSWORD
+        sync: false

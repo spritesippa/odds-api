@@ -9,8 +9,9 @@ import { MARKETS, SELECTIONS, SPORTS } from "./providers/provider.mjs";
 // Cap it so a live provider isn't hit with hundreds of requests per page load.
 const MAX_LIST_SUMMARIES = 30;
 
-// Dashboard insights look at up to this many upcoming events.
-const MAX_INSIGHT_EVENTS = 20;
+// Dashboard insights scan the next N events. Each costs several upstream
+// calls with a live provider, so live mode looks at fewer.
+const MAX_INSIGHT_EVENTS = { mock: 20, live: 8 };
 
 export const DISCLAIMER =
   "Research tool only. Prices can be stale, markets can suspend, bets can void, limits apply, and availability depends on your jurisdiction. Nothing here is a guarantee of profit.";
@@ -30,7 +31,7 @@ async function referenceMove(provider, eventId, market, selection) {
 }
 
 async function buildInsights(provider) {
-  const events = (await provider.listEvents()).slice(0, MAX_INSIGHT_EVENTS);
+  const events = (await provider.listEvents()).slice(0, provider.live ? MAX_INSIGHT_EVENTS.live : MAX_INSIGHT_EVENTS.mock);
   const movers = [];
   const gaps = [];
   const stale = [];

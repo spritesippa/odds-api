@@ -36,6 +36,21 @@ export function bookColor(key) {
   return bookColors.get(key);
 }
 
+const MAX_CHART_BOOKS = 6;
+
+/** Pick up to 6 series: familiar books first, then others in order; each
+ *  keeps its fixed color, and unfamiliar books take the free slots. */
+function chartedSeries(series) {
+  const rank = (s) => (BOOK_SLOTS.includes(s.book) ? BOOK_SLOTS.indexOf(s.book) : BOOK_SLOTS.length);
+  const picked = [...series].sort((a, b) => rank(a) - rank(b)).slice(0, MAX_CHART_BOOKS);
+  const used = new Set(picked.filter((s) => BOOK_SLOTS.includes(s.book)).map((s) => BOOK_SLOTS.indexOf(s.book)));
+  const free = [0, 1, 2, 3, 4, 5].filter((i) => !used.has(i));
+  return picked.map((s) => ({
+    ...s,
+    color: BOOK_SLOTS.includes(s.book) ? `var(--series-${BOOK_SLOTS.indexOf(s.book) + 1})` : `var(--series-${free.shift() + 1})`
+  }));
+}
+
 const state = { sport: "all", market: "moneyline", selection: null, eventId: null, view: null };
 
 export function matchup(event) {
@@ -279,19 +294,22 @@ async function loadHistory(event, market, token) {
   if (!isCurrent(token) || state.selection !== selection || state.market !== market.market) return;
   if (!document.getElementById("move-chart")) return;
 
+  // A live market can have 20+ books; chart at most 6 (familiar books first)
+  // so lines stay readable. The table below still lists every book.
+  const charted = chartedSeries(history.series);
   const toSeries = (fn) =>
-    history.series.map((s) => ({
+    charted.map((s) => ({
       id: s.book,
       name: s.name,
-      color: bookColor(s.book),
+      color: s.color,
       points: s.points.map((p) => ({ x: Date.parse(p.t), y: fn(p), raw: p }))
     }));
   const implied = (p) => (p.price > 0 ? 100 / (p.price + 100) : -p.price / (-p.price + 100));
   const fmtLine = (p) => (p.point === null || p.point === undefined ? "" : `${market.market === "spread" ? formatPoint(p.point) : p.point} `);
 
-  document.getElementById("move-legend").replaceChildren(
-    ...history.series.map((s) => el("span", { class: "key" }, [el("i", { class: "swatch line", style: { background: bookColor(s.book) } }), s.name]))
-  );
+  const legend = charted.map((s) => el("span", { class: "key" }, [el("i", { class: "swatch line", style: { background: s.color } }), s.name]));
+  if (history.series.length > charted.length) legend.push(el("span", { class: "fine" }, `Showing ${charted.length} of ${history.series.length} books`));
+  document.getElementById("move-legend").replaceChildren(...legend);
   const xFormat = (x, long) => (long ? dateTime(x) : shortDateTime(x));
   lineChart(document.getElementById("move-chart"), {
     series: toSeries(implied),
@@ -318,6 +336,7 @@ async function loadHistory(event, market, token) {
       ariaLabel: `${marketLabel(event.sport, market.market)} line by sportsbook over time`
     });
   }
+  const colorFor = new Map(charted.map((c) => [c.book, c.color]));
   document.getElementById("move-table").replaceChildren(
     el("table", { class: "move-table" }, [
       el(
@@ -335,7 +354,7 @@ async function loadHistory(event, market, token) {
         {},
         history.perBook.map((b) =>
           el("tr", {}, [
-            el("th", { scope: "row" }, [el("i", { class: "dot", style: { background: bookColor(b.book) } }), b.name]),
+            el("th", { scope: "row" }, [el("i", { class: "dot", style: { background: colorFor.get(b.book) || bookColor(b.book) } }), b.name]),
             el("td", { class: "num" }, `${fmtLine(b.open)}${odds(b.open.price)}`),
             el("td", { class: "num" }, `${fmtLine(b.current)}${odds(b.current.price)}`),
             el("td", { class: `num ${tone(b.impliedMove)}` }, signedPct(b.impliedMove))

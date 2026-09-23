@@ -93,10 +93,11 @@ export async function renderDashboard(view, token) {
     ? el("p", { class: "fine neg" }, `${insights.stale.length} sportsbook price${insights.stale.length === 1 ? " is" : "s are"} stale (not updated in 15+ min). Stale prices often look like value but get pulled or limited.`)
     : null;
 
+  const banner = meta.provider.live
+    ? []
+    : [el("p", { class: "banner" }, [el("strong", {}, "Mock data. "), "All games, prices, and line moves are invented for research and testing."])];
   view.replaceChildren(
-    meta.provider.live
-      ? null
-      : el("p", { class: "banner" }, [el("strong", {}, "Mock data. "), "All games, prices, and line moves are invented for research and testing."]),
+    ...banner,
     record,
     card([
       sectionHead("Biggest line moves", el("span", { class: "fine" }, "Sharpest book, open → now")),

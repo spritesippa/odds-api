@@ -12,7 +12,11 @@ import { decimalToAmerican } from "../lib/odds-math.mjs";
 import { SPORTS } from "./provider.mjs";
 
 const DEFAULT_BASE_URL = "https://api.odds-api.net/v1";
-const CACHE_TTL_MS = 30_000;
+// Cache lifetimes by endpoint: long enough that a public page can't burn the
+// API quota, short enough that prices stay fresh. Identical requests that
+// arrive while one is in flight share it.
+const TTL_MS = { events: 60_000, event: 300_000, snapshot: 30_000, history: 120_000 };
+const REQUEST_TIMEOUT_MS = 15_000;
 const EVENT_WINDOW_DAYS = 7;
 
 // How each dashboard sport maps to /events filters. League names come from
@@ -89,57 +93,77 @@ function outcomeName(event, selection, point) {
   return event ? event[selection].name : selection;
 }
 
-/** Group raw OddLine rows into normalized per-book markets. */
+// Spreads/totals must count the game's main scoring unit, not side markets
+// such as corners or cards that share the "total" market key.
+const MAIN_METRICS = new Set(["", "points", "goals", "runs", "rounds", "score"]);
+const PAIRS = { spread: ["away", "home"], total: ["over", "under"] };
+const ORDER = { moneyline: ["away", "draw", "home"], spread: ["away", "home"], total: ["over", "under"] };
+
+/**
+ * Group raw OddLine rows into normalized per-book markets.
+ * Moneyline keeps each side. Spreads and totals come as many alternate
+ * lines, so both sides are paired on the same line (home -3.5 with away
+ * +3.5; over 44.5 with under 44.5) and the main line is the complete pair
+ * priced closest to even money.
+ */
 export function mapSnapshot(raw, event) {
   const books = new Map();
   for (const line of raw.items || []) {
-    if (!line.is_available || !(line.odds > 1) || !isFullGame(line)) continue;
+    if (line.is_available === false || !(line.odds > 1) || !isFullGame(line)) continue;
     const market = normalizeMarket(line);
     const selection = normalizeSide(line);
-    if (!market || !selection) continue;
-    if (market === "total" && !["over", "under"].includes(selection)) continue;
-    if (market !== "total" && ["over", "under"].includes(selection)) continue;
-    if (market === "spread" && selection === "draw") continue;
+    if (!market || !selection || !ORDER[market].includes(selection)) continue;
+    if (market !== "moneyline" && !MAIN_METRICS.has(String(line.metric ?? "").toLowerCase())) continue;
 
     const point = market === "moneyline" ? null : Number.parseFloat(line.line);
     if (market !== "moneyline" && !Number.isFinite(point)) continue;
 
-    const key = line.bookmaker;
-    if (!books.has(key)) {
-      books.set(key, {
-        key,
-        name: line.bookmaker_name || key,
-        updatedAt: new Date(raw.as_of_ts_ms || Date.now()).toISOString(),
-        markets: {},
-        selectionKeys: {},
-        decimals: {}
-      });
+    if (!books.has(line.bookmaker)) {
+      books.set(line.bookmaker, { name: line.bookmaker_name || line.bookmaker, moneyline: {}, spread: new Map(), total: new Map() });
     }
-    const book = books.get(key);
-    const outcomes = (book.markets[market] ||= []);
-    // Keep one line per selection; for spreads/totals prefer the main line
-    // (the one priced closest to even money).
-    const slot = `${market}:${selection}`;
-    const existing = outcomes.findIndex((o) => o.selection === selection);
+    const book = books.get(line.bookmaker);
     const outcome = {
       selection,
       name: outcomeName(event, selection, point),
       price: decimalToAmerican(line.odds),
-      point
+      point,
+      decimal: line.odds,
+      key: line.selection_key || line.id
     };
-    const closerToEven = existing !== -1 && market !== "moneyline" && Math.abs(line.odds - 2) < Math.abs(book.decimals[slot] - 2);
-    if (existing === -1 || closerToEven) {
-      if (existing === -1) outcomes.push(outcome);
-      else outcomes[existing] = outcome;
-      book.selectionKeys[slot] = line.selection_key || line.id;
-      book.decimals[slot] = line.odds;
+    if (market === "moneyline") {
+      book.moneyline[selection] = outcome;
+    } else {
+      // Key both sides of a spread by the home team's line so they pair up.
+      const lineKey = market === "spread" ? (selection === "home" ? point : -point) : point;
+      if (!book[market].has(lineKey)) book[market].set(lineKey, {});
+      book[market].get(lineKey)[selection] = outcome;
     }
   }
-  return {
-    eventId: String(raw.event_id),
-    asOf: new Date(raw.as_of_ts_ms || Date.now()).toISOString(),
-    books: [...books.values()].map(({ decimals, ...book }) => book)
-  };
+
+  const asOf = new Date(raw.as_of_ts_ms || Date.now()).toISOString();
+  const out = [];
+  for (const [key, book] of books) {
+    const markets = {};
+    const selectionKeys = {};
+    const take = (market, outcomes) => {
+      markets[market] = ORDER[market].map((s) => outcomes[s]).filter(Boolean).map(({ decimal, key: k, ...o }) => o);
+      for (const o of Object.values(outcomes)) selectionKeys[`${market}:${o.selection}`] = o.key;
+    };
+    const sides = Object.keys(book.moneyline);
+    if (sides.includes("home") && sides.includes("away")) take("moneyline", book.moneyline);
+    for (const market of ["spread", "total"]) {
+      const [a, b] = PAIRS[market];
+      let main = null;
+      for (const pair of book[market].values()) {
+        if (!pair[a] || !pair[b]) continue;
+        const balance = Math.abs(pair[a].decimal - pair[b].decimal);
+        if (!main || balance < main.balance) main = { pair, balance };
+      }
+      if (main) take(market, main.pair);
+    }
+    if (Object.keys(markets).length) out.push({ key, name: book.name, updatedAt: asOf, markets, selectionKeys });
+  }
+  return { eventId: String(raw.event_id), asOf, books: out };
 }
 
 /**
@@ -154,28 +178,57 @@ export function createOddsApiProvider(options) {
   const cache = new Map();
   const eventIndex = new Map();
 
-  async function request(path, params = {}) {
+  const inflight = new Map();
+
+  async function request(path, params = {}, ttl = TTL_MS.snapshot) {
     const url = new URL(`${baseUrl}${path}`);
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
     }
     const cacheKey = url.toString();
     const hit = cache.get(cacheKey);
-    if (hit && clock() - hit.at < CACHE_TTL_MS) return hit.value;
+    if (hit && clock() - hit.at < hit.ttl) return hit.value;
+    if (inflight.has(cacheKey)) return inflight.get(cacheKey);
 
-    const response = await fetchImpl(url, { headers: { "X-API-Key": options.apiKey, Accept: "application/json" } });
-    if (response.status === 404) return null;
-    if (!response.ok) {
-      const error = new Error(`Odds API ${response.status} for ${path}`);
-      error.status = response.status === 429 ? 429 : 502;
-      throw error;
+    const pending = (async () => {
+      let response;
+      try {
+        response = await fetchImpl(url, {
+          headers: { "X-API-Key": options.apiKey, Accept: "application/json" },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        });
+      } catch (cause) {
+        const error = new Error("Couldn't reach the odds provider. Try again shortly.");
+        error.status = 502;
+        error.cause = cause;
+        throw error;
+      }
+      if (response.status === 404) return null;
+      if (!response.ok) {
+        // Never echo the key or the full upstream body back to the browser.
+        const messages = {
+          401: "The odds provider rejected the API key. Check ODDS_API_KEY on the server.",
+          403: "The API key isn't allowed to use this data. Check your odds-api.net plan.",
+          429: "Odds provider rate limit reached. Prices will load again shortly."
+        };
+        const error = new Error(messages[response.status] || `Odds provider error (${response.status}).`);
+        error.status = response.status === 429 ? 429 : 502;
+        throw error;
+      }
+      const value = await response.json();
+      const now = clock();
+      for (const [key, entry] of cache) {
+        if (now - entry.at >= entry.ttl) cache.delete(key);
+      }
+      cache.set(cacheKey, { at: now, ttl, value });
+      return value;
+    })();
+    inflight.set(cacheKey, pending);
+    try {
+      return await pending;
+    } finally {
+      inflight.delete(cacheKey);
     }
-    const value = await response.json();
-    for (const [key, entry] of cache) {
-      if (clock() - entry.at >= CACHE_TTL_MS) cache.delete(key);
-    }
-    cache.set(cacheKey, { at: clock(), value });
-    return value;
   }
 
   async function fetchEvents(sport) {
@@ -186,7 +239,7 @@ export function createOddsApiProvider(options) {
       start_from: nowSec,
       start_to: nowSec + EVENT_WINDOW_DAYS * 86400,
       limit: 25
-    });
+    }, TTL_MS.events);
     const events = (data?.items || []).map((item) => toEvent(item, sport));
     for (const event of events) eventIndex.set(event.id, event);
     return events;
@@ -194,7 +247,7 @@ export function createOddsApiProvider(options) {
 
   async function getEvent(eventId) {
     if (eventIndex.has(eventId)) return eventIndex.get(eventId);
-    const data = await request(`/events/${encodeURIComponent(eventId)}`);
+    const data = await request(`/events/${encodeURIComponent(eventId)}`, {}, TTL_MS.event);
     if (!data) return null;
     const event = toEvent(data);
     if (!event.sport) return null;
@@ -233,27 +286,35 @@ export function createOddsApiProvider(options) {
 
     async getLineHistory(eventId, { market, selection }) {
       const snapshot = await getSnapshot(eventId);
-      const source = snapshot?.books.find((book) => book.selectionKeys[`${market}:${selection}`]);
+      // Follow the sharp book's line when it has one; other books' prices
+      // for that same selection key come back alongside it.
+      const withKey = (snapshot?.books || []).filter((book) => book.selectionKeys[`${market}:${selection}`]);
+      const source = withKey.find((book) => book.key === "pinnacle") || withKey[0];
       if (!source) return null;
-      const currentPoint = source.markets[market].find((o) => o.selection === selection)?.point ?? null;
-      const now = Math.floor(clock() / 60_000) * 60_000;
+      const currentPoint = source.markets[market]?.find((o) => o.selection === selection)?.point ?? null;
+      // A 5-minute grid keeps the request (and its cache entry) stable.
+      const now = Math.floor(clock() / 300_000) * 300_000;
+      const bookNames = new Map(snapshot.books.map((b) => [b.key, b.name]));
       const raw = await request(`/events/${encodeURIComponent(eventId)}/odds/history`, {
         selection_key: source.selectionKeys[`${market}:${selection}`],
         from_ts: new Date(now - 3 * 86400_000).toISOString(),
         to_ts: new Date(now).toISOString(),
         limit_points_per_bookmaker: 200
-      });
+      }, TTL_MS.history);
       return {
         eventId,
         market,
         selection,
-        series: (raw?.series || []).map((series) => ({
-          book: series.bookmaker_name,
-          name: series.bookmaker_name,
-          points: (series.points || [])
-            .filter((p) => p.is_available !== false && p.odds > 1)
-            .map((p) => ({ t: new Date(p.tick_ts).toISOString(), price: decimalToAmerican(p.odds), point: currentPoint }))
-        }))
+        series: (raw?.series || [])
+          .map((series) => ({
+            book: series.bookmaker_name,
+            name: bookNames.get(series.bookmaker_name) || series.bookmaker_name,
+            points: (series.points || [])
+              .filter((p) => p.is_available !== false && p.odds > 1 && !Number.isNaN(Date.parse(p.tick_ts)))
+              .map((p) => ({ t: new Date(p.tick_ts).toISOString(), price: decimalToAmerican(p.odds), point: currentPoint }))
+              .sort((a, b) => a.t.localeCompare(b.t))
+          }))
+          .filter((series) => series.points.length > 0)
       };
     }
   };

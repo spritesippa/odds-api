@@ -71,9 +71,31 @@ browser (public/*)  ──fetch──▶  server.mjs  /api/*  ──▶  analysi
 
    With a key present, the server uses `odds-api-provider.mjs`. That adapter sends the key as an `X-API-Key` header, caches responses for 30 seconds, and maps responses into the normalized shapes. The browser never receives the key. See `.env.example`.
 
-2. Optional variables: `ODDS_PROVIDER=mock` forces mock data even when a key is set. `ODDS_API_BASE_URL` overrides the base URL.
+2. Optional variables: `ODDS_PROVIDER=mock` forces mock data even when a key is set. `ODDS_API_BASE_URL` overrides the base URL. `DASHBOARD_PASSWORD` requires a password. `TRUST_PROXY=1` goes with a hosting proxy.
 
-> The live adapter was written against this repo's `openapi.yaml` and unit-tested with a fake `fetch`. It has **not** been run against the live service yet. Market names vary by bookmaker, so check a few real responses before relying on it, and extend `normalizeMarket()` if a market comes back empty.
+> The live adapter follows this repo's `openapi.yaml` and the SDK's sample responses. It's tested against a fake odds-api.net server, covering main-line pairing of alternate spreads and totals, skipping corners and cards totals, and caching. It has **not** been run against the live service yet. If a market comes back empty, compare a real snapshot's `market_key`, `side`, `period` and `metric` values with `normalizeMarket()` and `MAIN_METRICS` in `src/providers/odds-api-provider.mjs`.
+
+### Deploy to Render (live data)
+
+`render.yaml` at the repo root describes the service, so Render can set it up for you:
+
+1. In Render, choose **New → Blueprint** and connect this GitHub repo. Pick the branch that contains `render.yaml`.
+2. Render asks for two secret values, which are stored in Render and not in the repo:
+   - `ODDS_API_KEY`: your odds-api.net key. Setting it turns on live data.
+   - `DASHBOARD_PASSWORD`: a password for the site (enter any username). Set one, because every visitor's page loads spend your API quota.
+3. Deploy. The site is available at `https://<service-name>.onrender.com`.
+
+Protections built in for a public deployment:
+
+| | |
+| --- | --- |
+| Key stays server-side | sent to odds-api.net as a header, never to the browser; error messages never include it |
+| Password (optional) | HTTP Basic auth on every page and API route; `/healthz` stays open for Render's health check |
+| Upstream caching | events 60 s, prices 30 s, line history 2 min, event details 5 min; identical concurrent requests share one call |
+| Shared Dashboard cache | `/api/insights` is computed once every 2 minutes for all visitors and scans 8 live games (20 in mock mode) |
+| Rate limits | 120 API requests per visitor per minute, 600 in total per minute across all visitors |
+
+On Render's free plan the service sleeps after about 15 minutes idle, so the first visit afterwards takes up to a minute to wake it. Picks remain stored in each visitor's browser.
 
 ### Using a different odds vendor
 

@@ -95,30 +95,133 @@ test("stale books are flagged and excluded from consensus", async () => {
   assert.ok(Math.abs(ml.consensus.away.noVig - freshAvg) < 1e-9);
 });
 
-test("odds-api adapter maps snapshot lines into normalized markets", () => {
+// Shaped like real OddLine rows (see sdks/typescript/src/mock.ts): spreads
+// arrive as "handicap" with one row per alternate line.
+const line = (bookmaker, market_key, side, odds, extra = {}) => ({
+  id: `${bookmaker}::${market_key}::${side}::${extra.line ?? ""}`,
+  selection_key: `${market_key}:${side}${extra.line ? `:${extra.line}` : ""}`,
+  bookmaker,
+  market_key,
+  type: market_key,
+  bet_type: market_key,
+  period: 0,
+  period_str: "full time",
+  side,
+  odds,
+  is_available: true,
+  ...extra
+});
+
+test("odds-api adapter pairs spread/total sides on the main line", () => {
   const raw = {
     event_id: "123",
     as_of_ts_ms: NOW,
     items: [
-      { bookmaker: "bet365", market_key: "moneyline", period: "full time", side: "home", odds: 1.8, is_available: true },
-      { bookmaker: "bet365", market_key: "moneyline", period: "full time", side: "away", odds: 2.1, is_available: true },
-      { bookmaker: "bet365", market_key: "spread", period: "full time", side: "home", line: "-3.5", odds: 1.95, is_available: true },
-      { bookmaker: "bet365", market_key: "spread", period: "full time", side: "home", line: "-7.5", odds: 3.1, is_available: true },
-      { bookmaker: "bet365", market_key: "spread", period: "full time", side: "away", line: "3.5", odds: 1.87, is_available: true },
-      { bookmaker: "bet365", market_key: "totals", period: "full time", side: "over", line: "44.5", odds: 1.91, is_available: true },
-      { bookmaker: "bet365", market_key: "totals", period: "full time", side: "under", line: "44.5", odds: 1.91, is_available: true },
-      { bookmaker: "bet365", market_key: "totals", period: "1st half", side: "over", line: "21.5", odds: 1.9, is_available: true },
-      { bookmaker: "bet365", market_key: "player_points", period: "full time", side: "over", line: "20.5", odds: 1.9, is_available: true },
-      { bookmaker: "bet365", market_key: "moneyline", period: "full time", side: "draw", odds: 9, is_available: false }
+      line("pinnacle", "moneyline", "home", 1.8),
+      line("pinnacle", "moneyline", "away", 2.1),
+      line("pinnacle", "moneyline", "draw", 3.4),
+      // main handicap pair, plus an alternate pair and an unpaired row
+      line("pinnacle", "handicap", "home", 1.95, { line: "-3.5", metric: "points" }),
+      line("pinnacle", "handicap", "away", 1.9, { line: "3.5", metric: "points" }),
+      line("pinnacle", "handicap", "home", 3.1, { line: "-7.5", metric: "points" }),
+      line("pinnacle", "handicap", "away", 1.35, { line: "7.5", metric: "points" }),
+      line("pinnacle", "handicap", "home", 1.6, { line: "-1.5", metric: "points" }),
+      // goals total (kept) vs corners total (ignored)
+      line("pinnacle", "total", "over", 1.91, { line: "44.5", metric: "points" }),
+      line("pinnacle", "total", "under", 1.93, { line: "44.5", metric: "points" }),
+      line("pinnacle", "total", "over", 1.5, { line: "41.5", metric: "points" }),
+      line("pinnacle", "total", "under", 2.6, { line: "41.5", metric: "points" }),
+      line("pinnacle", "total", "over", 1.9, { line: "9.5", metric: "corners" }),
+      line("pinnacle", "total", "under", 1.9, { line: "9.5", metric: "corners" }),
+      // excluded: other periods, props, unavailable, one-sided books
+      line("pinnacle", "total", "over", 1.9, { line: "21.5", period: 1, period_str: "1st half" }),
+      line("pinnacle", "player_points", "over", 1.9, { line: "20.5" }),
+      line("bet365", "moneyline", "home", 1.85, { is_available: false }),
+      line("bet365", "moneyline", "away", 2.05)
     ]
   };
   const event = { home: { name: "Home FC" }, away: { name: "Away FC" } };
   const snapshot = mapSnapshot(raw, event);
-  const markets = snapshot.books[0].markets;
-  assert.deepEqual(markets.moneyline.map((o) => [o.selection, o.price]), [["home", -125], ["away", 110]]);
-  assert.deepEqual(markets.spread.map((o) => [o.selection, o.point]), [["home", -3.5], ["away", 3.5]]);
+  assert.equal(snapshot.books.length, 1, "bet365 has no complete market");
+  const { markets, selectionKeys } = snapshot.books[0];
+  assert.deepEqual(markets.moneyline.map((o) => [o.selection, o.price]), [["away", 110], ["draw", 240], ["home", -125]]);
+  assert.deepEqual(markets.spread.map((o) => [o.selection, o.point]), [["away", 3.5], ["home", -3.5]]);
   assert.deepEqual(markets.total.map((o) => [o.selection, o.point]), [["over", 44.5], ["under", 44.5]]);
-  assert.equal(snapshot.books[0].decimals, undefined);
+  assert.equal(selectionKeys["spread:home"], "handicap:home:-3.5");
+  assert.ok(markets.spread.every((o) => !("decimal" in o) && !("key" in o)));
+
+  // The analysis layer accepts the mapped snapshot as-is.
+  const view = buildEventView({ id: "123", ...event }, snapshot);
+  assert.ok(view.markets.spread.rows[0].hold > 0);
+});
+
+test("odds-api adapter builds line history from the sharp book's selection key", async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    const u = new URL(url);
+    if (u.pathname.endsWith("/odds/snapshot")) {
+      return Response.json({
+        event_id: "e1",
+        as_of_ts_ms: NOW,
+        items: [
+          line("draftkings", "handicap", "home", 1.91, { line: "-3", bookmaker_name: "DraftKings" }),
+          line("draftkings", "handicap", "away", 1.91, { line: "3", bookmaker_name: "DraftKings" }),
+          line("pinnacle", "handicap", "home", 1.95, { line: "-3.5", bookmaker_name: "Pinnacle" }),
+          line("pinnacle", "handicap", "away", 1.9, { line: "3.5", bookmaker_name: "Pinnacle" })
+        ]
+      });
+    }
+    if (u.pathname.endsWith("/odds/history")) {
+      return Response.json({
+        series: [
+          { bookmaker_name: "pinnacle", points: [
+            { tick_ts: "2026-09-23T10:00:00Z", odds: 1.98 },
+            { tick_ts: "2026-09-22T10:00:00Z", odds: 2.02 },
+            { tick_ts: "2026-09-23T11:00:00Z", odds: 1.5, is_available: false }
+          ] },
+          { bookmaker_name: "empty", points: [] }
+        ]
+      });
+    }
+    if (u.pathname === "/v1/events/e1") return Response.json({ event_id: "e1", league: "NFL", home_team: "Buffalo Bills", away_team: "Kansas City Chiefs", start_time: NOW / 1000 + 3600 });
+    return new Response("{}", { status: 404 });
+  };
+  const provider = createOddsApiProvider({ apiKey: "k", fetchImpl, now: () => NOW });
+  const history = await provider.getLineHistory("e1", { market: "spread", selection: "home" });
+  const historyCall = calls.find((c) => c.includes("/odds/history"));
+  assert.match(historyCall, /selection_key=handicap%3Ahome%3A-3\.5/);
+  assert.equal(history.series.length, 1, "empty series dropped");
+  assert.equal(history.series[0].name, "Pinnacle");
+  assert.deepEqual(history.series[0].points.map((p) => p.price), [102, -102], "sorted by time, unavailable dropped");
+  assert.ok(history.series[0].points.every((p) => p.point === -3.5));
+
+  // Repeating the request is served from cache (no new upstream calls).
+  const before = calls.length;
+  await provider.getLineHistory("e1", { market: "spread", selection: "home" });
+  assert.equal(calls.length, before);
+});
+
+test("odds-api adapter shares one upstream call between concurrent requests", async () => {
+  let count = 0;
+  const fetchImpl = async () => {
+    count += 1;
+    await new Promise((r) => setTimeout(r, 20));
+    return Response.json({ items: [], count: 0 });
+  };
+  const provider = createOddsApiProvider({ apiKey: "k", fetchImpl, now: () => NOW });
+  await Promise.all([provider.listEvents({ sport: "mlb" }), provider.listEvents({ sport: "mlb" }), provider.listEvents({ sport: "mlb" })]);
+  assert.equal(count, 1);
+});
+
+test("odds-api adapter explains a rejected key without leaking it", async () => {
+  const fetchImpl = async () => new Response("bad key secret-key", { status: 401 });
+  const provider = createOddsApiProvider({ apiKey: "secret-key", fetchImpl, now: () => NOW });
+  await assert.rejects(provider.listEvents({ sport: "nfl" }), (error) => {
+    assert.match(error.message, /rejected the API key/);
+    assert.ok(!error.message.includes("secret-key"));
+    return error.status === 502;
+  });
 });
 
 test("odds-api adapter keeps the key server-side in a header", async () => {
